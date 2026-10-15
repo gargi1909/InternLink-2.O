@@ -1,0 +1,337 @@
+// Prisma Schema for InternLink - Full-Stack College Internship Management System
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ----------------- ENUMS -----------------
+
+enum Role {
+  STUDENT
+  COMPANY
+  FACULTY
+  ADMIN
+}
+
+enum WorkMode {
+  Remote
+  Hybrid
+  On_site
+}
+
+enum InternshipStatus {
+  Draft
+  Open
+  In_Progress
+  Completed
+  Closed
+}
+
+enum ApplicationStatus {
+  Applied
+  Under_Review
+  Shortlisted
+  Interview_Scheduled
+  Selected
+  Rejected
+  Withdrawn
+}
+
+enum AttendanceStatus {
+  Present
+  Absent
+  Late
+  Leave
+  Holiday
+}
+
+enum WorkLogStatus {
+  Draft
+  Submitted
+  Reviewed
+  Changes_Requested
+}
+
+enum AssignmentStatus {
+  ACTIVE
+  INACTIVE
+}
+
+// ----------------- MODELS -----------------
+
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  passwordHash String
+  role         Role
+  name         String
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  studentProfile StudentProfile?
+  companyProfile CompanyProfile?
+  facultyProfile FacultyProfile?
+  notifications  Notification[]
+  auditLogs      AuditLog[]
+
+  @@map("users")
+}
+
+model StudentProfile {
+  id                String   @id @default(cuid())
+  userId            String   @unique
+  user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  phone             String?
+  college           String   @default("VIT Chennai")
+  collegeId         String   @unique
+  course            String   @default("B.Tech Computer Science")
+  year              String   @default("3rd Year")
+  department        String   @default("Computer Science")
+  bio               String?
+  skills            String   @default("[]") // JSON string array of skills
+  linkedin          String?
+  github            String?
+  resumeName        String?
+  resumePath        String?
+  profileCompletion Int      @default(70)
+  avatar            String?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  mentorAssignments StudentMentorAssignment[]
+  applications      InternshipApplication[]
+  attendanceRecords AttendanceRecord[]
+  workLogs          WorkLog[]
+  feedbacks         Feedback[]
+
+  @@map("student_profiles")
+}
+
+model CompanyProfile {
+  id          String   @id @default(cuid())
+  userId      String   @unique
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name        String
+  phone       String?
+  industry    String   @default("Software Development")
+  website     String?
+  description String?  @db.Text
+  location    String   @default("Bengaluru, Karnataka")
+  logoColor   String   @default("bg-blue-600")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  internships Internship[]
+  feedbacks   Feedback[]
+
+  @@map("company_profiles")
+}
+
+model FacultyProfile {
+  id          String   @id @default(cuid())
+  userId      String   @unique
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name        String
+  phone       String?
+  department  String   @default("Computer Science")
+  college     String   @default("VIT Chennai")
+  designation String   @default("Assistant Professor")
+  employeeId  String?  @unique
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  mentorAssignments StudentMentorAssignment[]
+
+  @@map("faculty_profiles")
+}
+
+// CRITICAL REQUIREMENT: Student-Mentor Assignment Table
+model StudentMentorAssignment {
+  id         String           @id @default(cuid())
+  studentId  String
+  facultyId  String
+  assignedAt DateTime         @default(now())
+  assignedBy String?          // User ID or name of Admin/TPO
+  status     AssignmentStatus @default(ACTIVE)
+
+  student StudentProfile @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  faculty FacultyProfile @relation(fields: [facultyId], references: [id], onDelete: Cascade)
+
+  @@index([facultyId])
+  @@index([studentId])
+  @@map("student_mentor_assignments")
+}
+
+// CRITICAL REQUIREMENT: Exact Internship Dates and Schedules
+model Internship {
+  id               String           @id @default(cuid())
+  companyId        String
+  company          CompanyProfile   @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  title            String
+  description      String           @db.Text
+  responsibilities String           @default("[]") // JSON string array
+  requiredSkills   String           @default("[]") // JSON string array
+  eligibility      String
+  location         String
+  workMode         WorkMode         @default(Hybrid)
+  duration         String           @default("6 months")
+  
+  // Exact Dates
+  startDate        DateTime
+  endDate          DateTime
+  deadline         DateTime
+
+  stipend          Int              @default(15000)
+  openings         Int              @default(2)
+  benefits         String           @default("[]") // JSON string array
+  postedDate       DateTime         @default(now())
+  status           InternshipStatus @default(Open)
+  type             String           @default("Software Development")
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
+
+  applications      InternshipApplication[]
+  attendanceRecords AttendanceRecord[]
+  workLogs          WorkLog[]
+  feedbacks         Feedback[]
+
+  @@index([companyId])
+  @@index([status])
+  @@map("internships")
+}
+
+model InternshipApplication {
+  id                  String            @id @default(cuid())
+  internshipId        String
+  internship          Internship        @relation(fields: [internshipId], references: [id], onDelete: Cascade)
+  studentId           String
+  student             StudentProfile    @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  coverLetter         String?           @db.Text
+  status              ApplicationStatus @default(Applied)
+  appliedDate         DateTime          @default(now())
+  lastUpdated         DateTime          @updatedAt
+  availabilityConfirmed Boolean         @default(false)
+  resumeName            String?
+  resumePath            String?
+
+  // Interview stage fields
+  interviewDate       DateTime?
+  interviewTime       String?
+  interviewLink       String?
+  interviewNotes      String?           @db.Text
+
+  // Exact joining dates schedule
+  expectedJoiningDate DateTime?
+  actualJoiningDate   DateTime?
+  completionDate      DateTime?
+
+  timeline            String            @default("[]") // JSON array of timeline steps
+
+  @@unique([internshipId, studentId])
+  @@index([studentId])
+  @@index([internshipId])
+  @@map("internship_applications")
+}
+
+model AttendanceRecord {
+  id           String           @id @default(cuid())
+  studentId    String
+  student      StudentProfile   @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  internshipId String?
+  internship   Internship?      @relation(fields: [internshipId], references: [id], onDelete: SetNull)
+  date         DateTime         @db.Date
+  status       AttendanceStatus @default(Present)
+  checkInTime  String?
+  remark       String?
+  approvedBy   String?          // Faculty or Company mentor ID
+  approvedAt   DateTime?
+  createdAt    DateTime         @default(now())
+  updatedAt    DateTime         @updatedAt
+
+  @@unique([studentId, date])
+  @@index([studentId])
+  @@index([internshipId])
+  @@map("attendance_records")
+}
+
+model WorkLog {
+  id             String         @id @default(cuid())
+  studentId      String
+  student        StudentProfile @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  internshipId   String?
+  internship     Internship?    @relation(fields: [internshipId], references: [id], onDelete: SetNull)
+  date           DateTime       @db.Date
+  workCompleted  String         @db.Text
+  hoursWorked    Float          @default(8)
+  challenges     String?        @db.Text
+  learning       String?        @db.Text
+  tomorrowPlan   String?        @db.Text
+  status         WorkLogStatus  @default(Submitted)
+  facultyComment String?        @db.Text
+  submittedDate  DateTime?      @default(now())
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+
+  @@index([studentId])
+  @@index([internshipId])
+  @@map("work_logs")
+}
+
+model Feedback {
+  id                    String         @id @default(cuid())
+  internshipId          String
+  internship            Internship     @relation(fields: [internshipId], references: [id], onDelete: Cascade)
+  studentId             String
+  student               StudentProfile @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  companyId             String
+  company               CompanyProfile @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  
+  performanceRating     Int            @default(4)
+  communicationRating   Int            @default(4)
+  technicalRating       Int            @default(4)
+  professionalismRating Int            @default(4)
+  teamworkRating        Int            @default(4)
+  overallRating         Int            @default(4)
+  comments              String         @db.Text
+  date                  DateTime       @default(now())
+
+  @@unique([internshipId, studentId])
+  @@index([studentId])
+  @@index([companyId])
+  @@map("feedbacks")
+}
+
+model Notification {
+  id          String   @id @default(cuid())
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  category    String   @default("General")
+  title       String
+  description String   @db.Text
+  read        Boolean  @default(false)
+  createdAt   DateTime @default(now())
+
+  @@index([userId, read])
+  @@map("notifications")
+}
+
+model AuditLog {
+  id         String   @id @default(cuid())
+  userId     String?
+  user       User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  action     String   // e.g. "ASSIGN_STUDENT_MENTOR", "REASSIGN_MENTOR", "UPDATE_ROLE", "APPROVE_ATTENDANCE"
+  targetType String   // e.g. "STUDENT", "MENTOR", "INTERNSHIP"
+  targetId   String?
+  details    String?  @db.Text
+  ipAddress  String?
+  createdAt  DateTime @default(now())
+
+  @@index([userId])
+  @@index([action])
+  @@map("audit_logs")
+}
