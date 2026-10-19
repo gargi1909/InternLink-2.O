@@ -1,3 +1,4 @@
+
 import express from 'express'
 import cors from 'cors'
 import cookieParser from 'cookie-parser'
@@ -17,12 +18,21 @@ import notificationRouter from './routes/notification.routes.js'
 dotenv.config()
 
 const app = express()
+
+// Trust Render's reverse proxy
+app.set('trust proxy', 1)
+
 const PORT = process.env.PORT || 5000
 const CLIENT_URL = process.env.CLIENT_URL || 'http://localhost:5173'
 
 // Middleware setup
 app.use(cors({
-  origin: [CLIENT_URL, 'http://localhost:5173', 'http://127.0.0.1:5173', 'http://localhost:3000'],
+  origin: [
+    CLIENT_URL,
+    'http://localhost:5173',
+    'http://127.0.0.1:5173',
+    'http://localhost:3000',
+  ],
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
@@ -33,9 +43,10 @@ app.use(express.urlencoded({ extended: true }))
 app.use(cookieParser())
 
 // Health check endpoint
-app.get('/api/health', async (req, res) => {
+app.get('/api/health', async (_req, res) => {
   try {
     await prisma.$queryRaw`SELECT 1`
+
     res.json({
       status: 'healthy',
       timestamp: new Date().toISOString(),
@@ -62,17 +73,23 @@ app.use('/api/notifications', notificationRouter)
 
 // 404 Route Handler
 app.use((req, res) => {
-  res.status(404).json({ success: false, message: `Route ${req.method} ${req.originalUrl} not found` })
+  res.status(404).json({
+    success: false,
+    message: `Route ${req.method} ${req.originalUrl} not found`,
+  })
 })
 
 // Centralized Error Handler
 app.use(errorHandler)
 
-// Server startup - only listen directly if not running tests
-const isTesting = process.env.NODE_ENV === 'test' || process.argv[1]?.includes('runTests')
+// Server startup
+const isTesting =
+  process.env.NODE_ENV === 'test' ||
+  process.argv[1]?.includes('runTests')
+
 if (!isTesting) {
   app.listen(PORT, () => {
-    console.log(`🚀 InternLink Full-Stack Server running on http://localhost:${PORT}`)
+    console.log(`🚀 InternLink Full-Stack Server running on port ${PORT}`)
   })
 }
 
